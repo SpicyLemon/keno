@@ -15,6 +15,8 @@ MIN_PICKS=1
 DEFAULT_CELLS=( '80' )
 MIN_CELLS=2
 MAX_CELLS=1000
+DEFAULT_FIRST_ROW=1
+DEFAULT_LEFT_COL='A'
 DEFAULT_V_STATE="NO"
 DEFAULT_V_STATE_OPT_VAL="YES"
 DEFAULT_GEN_STATE="YES"
@@ -29,7 +31,7 @@ To use this script:
     2.  Copy the output to your clipboard.
             For large data sets, consider piping the script output to a file or pbcopy.
     3.  Select the appropriate cell in your spreadsheet, and paste the data.
-            By default, the appropriate cell is A1. But this might not be the case with the --first-row, --left-column, and --no-header options.
+            By default, the appropriate cell is $DEFAULT_LEFT_COL$DEFAULT_FIRST_ROW. But this might not be the case with the --first-row, --left-column, and --no-header options.
     4.  Tell it to split the rows into cells on the semicolons.
     5.  In Google Sheets, reformat the calculation cells to get the values instead of the strings you pasted in.
 
@@ -57,14 +59,14 @@ Usage: ./$KENO_ODDS_GEN_SCRIPT_NAME [-d <val>|--draws <val>] [-p <val>|--picks <
     --first-row defines what the first row number will be.
         Provided value must be a number.
         The first row is row 1 (just like in all the spreadsheet programs).
-        By default, this is 1.
+        By default, this is '$DEFAULT_FIRST_ROW'.
     --left-column defines the left-most column.
         Provided value should be a letter or letters, but can also be a column number, with column A being a 1.
-        By default, this is A.
+        By default, this is '$DEFAULT_LEFT_COL'.
     --no-header indicates that you do not want the header row included in the output.
 
     Notes:
-        * Basically, if you are going to select a cell other than A1 to paste this information into,
+        * Basically, if you are going to select a cell other than $DEFAULT_LEFT_COL$DEFAULT_FIRST_ROW to paste this information into,
           then you should define the --first-row and --left-column appropriately.
 
     -v or --verbose turns verbosity on or off. The <state> is optional.
@@ -242,9 +244,9 @@ col_letters_to_index () {
     printf '%d' "$retval"
 }
 
-# Usage: generate_keno_odds_rows <draws> <picks> <cells> <verbose> <first_row> <left_cell> <no_header>
+# Usage: generate_keno_odds_rows <draws> <picks> <cells> <verbose> <first_row> <left_column> <no_header>
 generate_keno_odds_rows () {
-    local draws picks cells verbose first_row left_cell no_header header_cells row_num left_cell_idx \
+    local draws picks cells verbose first_row left_col no_header header_cells row_num left_col_idx \
           cell_col draw_col pick_col hit_col hit_comb_col miss_comb_col pick_comb_col odds_col chance_col \
           cell draw pick hit row_cells
     draws="$1"
@@ -252,7 +254,7 @@ generate_keno_odds_rows () {
     cells="$3"
     verbose="$4"
     first_row="$5"
-    left_cell="$6"
+    left_col="$6"
     no_header="$7"
     header_cells=( "cells" "draws" "picks" "hits" "hit combos" "miss combos" "pick combos" "odds (1 in ...)" "% chance" )
     if [[ -n "$first_row" ]]; then
@@ -260,28 +262,28 @@ generate_keno_odds_rows () {
     else
         row_num='1'
     fi
-    if [[ -n "$left_cell" ]]; then
-        if [[ "$left_cell" =~ ^[[:digit:]]+$ ]]; then
-            left_cell_idx="$( max "$left_cell" '1' )"
+    if [[ -n "$left_col" ]]; then
+        if [[ "$left_col" =~ ^[[:digit:]]+$ ]]; then
+            left_col_idx="$( max "$left_col" '1' )"
         else
-            left_cell_idx="$( col_letters_to_index "$left_cell" )"
+            left_col_idx="$( col_letters_to_index "$left_col" )"
         fi
     else
-        left_cell_idx='1'
+        left_col_idx='1'
     fi
     if [[ -z "$no_header" ]]; then
         echo -E "$( join ';' "${header_cells[@]}" )"
         row_num=$(( row_num + 1 ))
     fi
-    cell_col="$( col_index_to_letters "$left_cell_idx" )"
-    draw_col="$( col_index_to_letters "$(( left_cell_idx + 1 ))" )"
-    pick_col="$( col_index_to_letters "$(( left_cell_idx + 2 ))" )"
-    hit_col="$( col_index_to_letters "$(( left_cell_idx + 3 ))" )"
-    hit_comb_col="$( col_index_to_letters "$(( left_cell_idx + 4 ))" )"
-    miss_comb_col="$( col_index_to_letters "$(( left_cell_idx + 5 ))" )"
-    pick_comb_col="$( col_index_to_letters "$(( left_cell_idx + 6 ))" )"
-    odds_col="$( col_index_to_letters "$(( left_cell_idx + 7 ))" )"
-    chance_col="$( col_index_to_letters "$(( left_cell_idx + 8 ))" )"
+    cell_col="$( col_index_to_letters "$left_col_idx" )"
+    draw_col="$( col_index_to_letters "$(( left_col_idx + 1 ))" )"
+    pick_col="$( col_index_to_letters "$(( left_col_idx + 2 ))" )"
+    hit_col="$( col_index_to_letters "$(( left_col_idx + 3 ))" )"
+    hit_comb_col="$( col_index_to_letters "$(( left_col_idx + 4 ))" )"
+    miss_comb_col="$( col_index_to_letters "$(( left_col_idx + 5 ))" )"
+    pick_comb_col="$( col_index_to_letters "$(( left_col_idx + 6 ))" )"
+    odds_col="$( col_index_to_letters "$(( left_col_idx + 7 ))" )"
+    chance_col="$( col_index_to_letters "$(( left_col_idx + 8 ))" )"
     for cell in $cells; do
         for draw in $draws; do
             if [[ "$cell" -ge "$draw" ]]; then
@@ -429,6 +431,12 @@ fi
 if [[ "${#CELLS[@]}" -eq '0' ]]; then
     CELLS+=( "${DEFAULT_CELLS[@]}" )
 fi
+if [[ -z "$FIRST_ROW" ]]; then
+    FIRST_ROW="$DEFAULT_FIRST_ROW"
+fi
+if [[ -z "$LEFT_COL" ]]; then
+    LEFT_COL="$DEFAULT_LEFT_COL"
+fi
 
 # Some final valiation
 for cell in "${CELLS[@]}"; do
@@ -465,12 +473,16 @@ if [[ "${#errors[@]}" -gt '0' ]]; then
 fi
 
 # And do what you're supposed to do
-CMD=( generate_keno_odds_rows "$( echo -E "${DRAWS[@]}" )" "$( echo -E "${PICKS[@]}" )" "$( echo -E "${CELLS[@]}" )" "$VERBOSE" "$FIRST_ROW" "$LEFT_COLUMN" "$NO_HEADER" )
+CMD=( generate_keno_odds_rows "$( echo -E "${DRAWS[@]}" )" "$( echo -E "${PICKS[@]}" )" "$( echo -E "${CELLS[@]}" )"
+                              "$VERBOSE" "$FIRST_ROW" "$LEFT_COLUMN" "$NO_HEADER" )
 if [[ "$VERBOSE" == 'YES' ]]; then
     echo "Draws: ( ${DRAWS[@]} )"
     echo "Picks: ( ${PICKS[@]} )"
     echo "Cells: ( ${CELLS[@]} )"
-    echo "Verbose: $VERBOSE"
+    echo "  First row: $FIRST_ROW"
+    echo "   Left col: $LEFT_COLUMN"
+    echo "Show header: $( if [[ -n "$NO_HEADER" ]]; then echo -E -n 'NO'; else echo -E -n 'YES'; fi )"
+    echo " Verbose: $VERBOSE"
     echo "Generate: $DO_GEN"
     echo -e -n "\033[1;37m"
     echo -E -n "${CMD[0]}"
