@@ -1,5 +1,5 @@
 #!/bin/bash
-# This is used to generate the rows of the keno odds spreadsheet.
+# This is used to generate the rows of the keno odds spreadsheet data.
 
 # Determine if this script was invoked by being executed or sourced.
 ( [[ -n "$ZSH_EVAL_CONTEXT" && "$ZSH_EVAL_CONTEXT" =~ :file$ ]] \
@@ -22,7 +22,19 @@ DEFAULT_GEN_STATE_OPT_VAL="YES"
 
 keno_odds_gen_usage () {
     cat << EOF
+$KENO_ODDS_GEN_SCRIPT_NAME - Generates data that can be copy and pasted into a spreadsheet to get keno odds.
+
+To use this script:
+    1.  Run the script with the desired parameters.
+    2.  Copy the output to your clipboard.
+            For large data sets, consider piping the script output to a file or pbcopy.
+    3.  Select the appropriate cell in your spreadsheet, and paste the data.
+            By default, the appropriate cell is A1. But this might not be the case with the --first-row, --left-column, and --no-header options.
+    4.  Tell it to split the rows into cells on the semicolons.
+    5.  In Google Sheets, reformat the calculation cells to get the values instead of the strings you pasted in.
+
 Usage: ./$KENO_ODDS_GEN_SCRIPT_NAME [-d <val>|--draws <val>] [-p <val>|--picks <val>] [-c|--cells <val>]
+         $( echo -e "$KENO_ODDS_GEN_SCRIPT_NAME" | sed 's/./ /g;' ) [--first-row <num>] [--left-column <col>] [--no-header]
          $( echo -e "$KENO_ODDS_GEN_SCRIPT_NAME" | sed 's/./ /g;' ) [-v <state>|--verbose [<state>]] [-g [<state>]|--generate [<state>]]
 
     -d or --draws defines the number of spots that are drawn by the machine. Default is '${DEFAULT_DRAWS[@]}'.
@@ -41,6 +53,19 @@ Usage: ./$KENO_ODDS_GEN_SCRIPT_NAME [-d <val>|--draws <val>] [-p <val>|--picks <
         All pick values must be greater than or equal to $MIN_PICKS.
         Cell counts must be greater than or equal to $MIN_CELLS.
         Cell counts must be less than or equal to $MAX_CELLS.
+
+    --first-row defines what the first row number will be.
+        Provided value must be a number.
+        The first row is row 1 (just like in all the spreadsheet programs).
+        By default, this is 1.
+    --left-column defines the left-most column.
+        Provided value should be a letter or letters, but can also be a column number, with column A being a 1.
+        By default, this is A.
+    --no-header indicates that you do not want the header row included in the output.
+
+    Notes:
+        * Basically, if you are going to select a cell other than A1 to paste this information into,
+          then you should define the --first-row and --left-column appropriately.
 
     -v or --verbose turns verbosity on or off. The <state> is optional.
         If this option is not provided, the default is '$DEFAULT_V_STATE'.
@@ -90,6 +115,7 @@ Usage: ./$KENO_ODDS_GEN_SCRIPT_NAME [-d <val>|--draws <val>] [-p <val>|--picks <
 EOF
 }
 
+# Usage: min <values ...>
 min () {
     local retval
     retval="$1"
@@ -103,6 +129,7 @@ min () {
     echo -E -n "$retval"
 }
 
+# Usage: max <values ...>
 max () {
     local retval
     retval="$1"
@@ -116,6 +143,9 @@ max () {
     echo -E -n "$retval"
 }
 
+# Parses an input string into well-formed values.
+# If there is something wrong with the input, this function will have an exit code of 1.
+# Usage: parse_input_val <input> || there_was_a_problem="YES"
 parse_input_val () {
     local inputs outputs
     inputs="$@"
@@ -137,14 +167,27 @@ parse_input_val () {
     return 0
 }
 
+# Usage: uppercase <string>
+#   or   <do stuff> | uppercase
 uppercase () {
-    printf '%s' "$1" | tr "[:lower:]" "[:upper:]"
+    if [[ -n "$@" ]]; then
+        printf '%s' "$@" | uppercase
+        return 0
+    fi
+    tr "[:lower:]" "[:upper:]"
 }
 
+# Usage: lowercase <string>
+#   or   <do stuff> | lowercase
 lowercase () {
-    printf '%s' "$1" | tr "[:upper:]" "[:lower:]"
+    if [[ -n "$@" ]]; then
+        printf '%s' "$@" | lowercase
+        return 0
+    fi
+    tr "[:upper:]" "[:lower:]"
 }
 
+# Usage: join <delimiter> <strings ...>
 join () {
     local d retval v
     d="$1"
@@ -157,27 +200,102 @@ join () {
     done
 }
 
+# Converts a column number to it's letters. 1 -> A
+# Usage: col_index_to_letters <number>
+col_index_to_letters () {
+    local idx idx_this idx_1
+    idx="$1"
+    idx=$(( idx - 1 ))
+    if [[ "$idx" -ge '26' ]]; then
+        idx_this=$(( idx % 26 ))
+        col_index_to_letters $(( idx / 26 ))
+    else
+        idx_this="$idx"
+    fi
+    idx_1=$(( idx_this % 10 ))
+    if [[ "$idx_this" -ge '20' ]]; then
+        printf '%d' "$idx_1" | tr '012345' 'UVWXYZ'
+    elif [[ "$idx_this" -ge '10' ]]; then
+        printf '%d' "$idx_1" | tr '0123456789' 'KLMNOPQRST'
+    else
+        printf '%d' "$idx_1" | tr '0123456789' 'ABCDEFGHIJ'
+    fi
+}
+
+# Converts a column letter to it's index. A -> 1
+# Usage: col_letters_to_index
+col_letters_to_index () {
+    local col l retval
+    col="$1"
+    retval=0
+    for l in $( echo -E "$col" | sed -E 's/(.)/\1 /g' | uppercase ); do
+        retval=$(( retval * 26 ))
+        if [[ "$l" =~ [ABCDEFGHIJ] ]]; then
+            retval=$(( retval + $( printf '%s' "$l" | tr 'ABCDEFGHIJ' '0123456789' ) ))
+        elif [[ "$l" =~ [KLMNOPQRST] ]]; then
+            retval=$(( retval + $( printf '%s' "$l" | tr 'KLMNOPQRST' '0123456789' ) + 10 ))
+        elif [[ "$l" =~ [UVWXYZ] ]]; then
+            retval=$(( retval + $( printf '%s' "$l" | tr 'UVWXYZ' '012345' ) + 20 ))
+        fi
+        retval=$(( retval + 1 ))
+    done
+    printf '%d' "$retval"
+}
+
+# Usage: generate_keno_odds_rows <draws> <picks> <cells> <verbose> <first_row> <left_cell> <no_header>
 generate_keno_odds_rows () {
-    local draws picks cells verbose row_num cell draw pick hit
+    local draws picks cells verbose first_row left_cell no_header header_cells row_num left_cell_idx \
+          cell_col draw_col pick_col hit_col hit_comb_col miss_comb_col pick_comb_col odds_col chance_col \
+          cell draw pick hit row_cells
     draws="$1"
     picks="$2"
     cells="$3"
     verbose="$4"
-    row_num='2'
+    first_row="$5"
+    left_cell="$6"
+    no_header="$7"
+    header_cells=( "cells" "draws" "picks" "hits" "hit combos" "miss combos" "pick combos" "odds (1 in ...)" "% chance" )
+    if [[ -n "$first_row" ]]; then
+        row_num="$first_row"
+    else
+        row_num='1'
+    fi
+    if [[ -n "$left_cell" ]]; then
+        if [[ "$left_cell" =~ ^[[:digit:]]+$ ]]; then
+            left_cell_idx="$( max "$left_cell" '1' )"
+        else
+            left_cell_idx="$( col_letters_to_index "$left_cell" )"
+        fi
+    else
+        left_cell_idx='1'
+    fi
+    if [[ -z "$no_header" ]]; then
+        echo -E "$( join ';' "${header_cells[@]}" )"
+        row_num=$(( row_num + 1 ))
+    fi
+    cell_col="$( col_index_to_letters "$left_cell_idx" )"
+    draw_col="$( col_index_to_letters "$(( left_cell_idx + 1 ))" )"
+    pick_col="$( col_index_to_letters "$(( left_cell_idx + 2 ))" )"
+    hit_col="$( col_index_to_letters "$(( left_cell_idx + 3 ))" )"
+    hit_comb_col="$( col_index_to_letters "$(( left_cell_idx + 4 ))" )"
+    miss_comb_col="$( col_index_to_letters "$(( left_cell_idx + 5 ))" )"
+    pick_comb_col="$( col_index_to_letters "$(( left_cell_idx + 6 ))" )"
+    odds_col="$( col_index_to_letters "$(( left_cell_idx + 7 ))" )"
+    chance_col="$( col_index_to_letters "$(( left_cell_idx + 8 ))" )"
     for cell in $cells; do
         for draw in $draws; do
             if [[ "$cell" -ge "$draw" ]]; then
                 for pick in $picks; do
                     if [[ "$cell" -ge "$pick" ]]; then
                         for hit in $( seq "$( max '0' "$(( ( cell - draw - pick ) * -1 ))" )" "$( min "$draw" "$pick" )" ); do
-                            ROW_CELLS=( "$cell" "$draw" "$pick" "$hit"
-                                        "=COMBIN(B$row_num,D$row_num)"
-                                        "=COMBIN(A$row_num-B$row_num,C$row_num-D$row_num)"
-                                        "=COMBIN(A$row_num,C$row_num)"
-                                        "=G$row_num/(E$row_num*F$row_num)"
-                                        "=100/H$row_num"
+                            row_cells=( "$cell" "$draw" "$pick" "$hit"
+                                        "=COMBIN($draw_col$row_num,$hit_col$row_num)"
+                                        "=COMBIN($cell_col$row_num-$draw_col$row_num,$pick_col$row_num-$hit_col$row_num)"
+                                        "=COMBIN($cell_col$row_num,$pick_col$row_num)"
+                                        "=$pick_comb_col$row_num/($hit_comb_col$row_num*$miss_comb_col$row_num)"
+                                        "=100/$odds_col$row_num"
                             )
-                            echo -E "$( join ';' "${ROW_CELLS[@]}" )"
+                            echo -E "$( join ';' "${row_cells[@]}" )"
                             row_num=$(( row_num + 1 ))
                         done
                     fi
@@ -251,6 +369,25 @@ while [[ "$#" -gt '0' ]]; do
         fi
         CELLS+=( $parsed_vals )
         ;;
+    --first-row|--1st-row|--top-row)
+        if [[ -n "$2" && "$2" =~ ^[[:digit:]]+$ ]]; then
+            FIRST_ROW="$2"
+            shift
+        else
+            errors+=( "Invalid first row value '$2'" )
+        fi
+        ;;
+    --left-col|--left-column)
+        if [[ -n "$2" && ( "$2" =~ ^[[:alpha:]]+$ || "$2" =~ ^[[:digit:]]$ ) ]]; then
+            LEFT_COLUMN="$2"
+            shift
+        else
+            errors+=( "Invalid left column value '$2" )
+        fi
+        ;;
+    --no-header)
+        NO_HEADER='YES'
+        ;;
     -v|--verbose)
         if [[ -n "$2" && ! "$2" =~ ^- ]]; then
             val="$( uppercase "$2" )"
@@ -290,7 +427,7 @@ if [[ "${#PICKS[@]}" -eq '0' ]]; then
     PICKS+=( "${DEFAULT_PICKS[@]}" )
 fi
 if [[ "${#CELLS[@]}" -eq '0' ]]; then
-    CELLS+==( "${DEFAULT_CELLS[@]}" )
+    CELLS+=( "${DEFAULT_CELLS[@]}" )
 fi
 
 # Some final valiation
@@ -328,7 +465,7 @@ if [[ "${#errors[@]}" -gt '0' ]]; then
 fi
 
 # And do what you're supposed to do
-CMD=( generate_keno_odds_rows "$( echo -E "${DRAWS[@]}" )" "$( echo -E "${PICKS[@]}" )" "$( echo -E "${CELLS[@]}" )" "$VERBOSE" )
+CMD=( generate_keno_odds_rows "$( echo -E "${DRAWS[@]}" )" "$( echo -E "${PICKS[@]}" )" "$( echo -E "${CELLS[@]}" )" "$VERBOSE" "$FIRST_ROW" "$LEFT_COLUMN" "$NO_HEADER" )
 if [[ "$VERBOSE" == 'YES' ]]; then
     echo "Draws: ( ${DRAWS[@]} )"
     echo "Picks: ( ${PICKS[@]} )"
