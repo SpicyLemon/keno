@@ -25,9 +25,9 @@ keno_odds_gen_usage () {
 Usage: ./$KENO_ODDS_GEN_SCRIPT_NAME [-d <val>|--draws <val>] [-p <val>|--picks <val>] [-c|--cells <num>]
          $( echo -e "$KENO_ODDS_GEN_SCRIPT_NAME" | sed 's/./ /g;' ) [-v <state>|--verbose [<state>]] [-g [<state>]|--generate [<state>]]
 
-    -d or --draws defines the number of spots that are drawn by the machine. Default is '$DEFAULT_CELLS'.
-    -p or --picks defines the number of spots that you have picked. Default is '${DEFAULT_DRAWS[@]}'.
-    -c or --cells defines the number of cells available to pick. Default is '${DEFAULT_PICKS[@]}'.
+    -d or --draws defines the number of spots that are drawn by the machine. Default is '${DEFAULT_DRAWS[@]}'.
+    -p or --picks defines the number of spots that you have picked. Default is '${DEFAULT_PICKS[@]}'.
+    -c or --cells defines the number of cells available to pick. Default is '$DEFAULT_CELLS'.
 
     The <val> can be one of the following:
         a) A number, e.g. --draws 20
